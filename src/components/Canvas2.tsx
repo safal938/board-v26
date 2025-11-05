@@ -318,21 +318,31 @@ function Canvas2() {
 
 
         // Create item nodes
-        const itemNodes: Node[] = allItems.map((item: any) => ({
-          id: item.id,
-          type: 'boardItem',
-          position: { x: item.x, y: item.y },
-          data: { 
-            item: item,
-            isSelected: false,
-            onUpdate: handleUpdateItem,
-            onDelete: handleDeleteItem,
-            onSelect: handleSelectItem,
-          },
-          draggable: true,
-          selectable: true,
-          zIndex: 1,
-        }));
+        const itemNodes: Node[] = allItems.map((item: any) => {
+          // Determine node type based on item type
+          const nodeType = item.type === 'triageFlow' ? 'triageFlow' : 'boardItem';
+          
+          // For triageFlow nodes, use item.data directly
+          const nodeData = item.type === 'triageFlow' 
+            ? item.data 
+            : { 
+                item: item,
+                isSelected: false,
+                onUpdate: handleUpdateItem,
+                onDelete: handleDeleteItem,
+                onSelect: handleSelectItem,
+              };
+          
+          return {
+            id: item.id,
+            type: nodeType,
+            position: { x: item.x, y: item.y },
+            data: nodeData,
+            draggable: true,
+            selectable: item.type !== 'triageFlow',
+            zIndex: 1,
+          };
+        });
 
         console.log('🎨 Creating nodes:', {
           zones: zoneNodes.length,
@@ -341,6 +351,48 @@ function Canvas2() {
         });
         
         setNodes([...zoneNodes, ...itemNodes]);
+
+        // Create edges for triage flow connections
+        const triageEdges: Edge[] = [
+          // Triage Inbox to ALF Category
+          {
+            id: 'edge-triage-to-alf',
+            source: 'triage-node-main',
+            target: 'triage-node-category-alf',
+            type: 'smoothstep',
+            animated: true,
+            style: { stroke: '#00897b', strokeWidth: 2 },
+          },
+          // Triage Inbox to SAH Category
+          {
+            id: 'edge-triage-to-sah',
+            source: 'triage-node-main',
+            target: 'triage-node-category-sah',
+            type: 'smoothstep',
+            animated: true,
+            style: { stroke: '#00897b', strokeWidth: 2 },
+          },
+          // ALF Category to ALF Grid
+          {
+            id: 'edge-alf-to-grid',
+            source: 'triage-node-category-alf',
+            target: 'triage-node-grid-alf',
+            type: 'smoothstep',
+            animated: true,
+            style: { stroke: '#26a69a', strokeWidth: 2 },
+          },
+          // SAH Category to SAH Grid
+          {
+            id: 'edge-sah-to-grid',
+            source: 'triage-node-category-sah',
+            target: 'triage-node-grid-sah',
+            type: 'smoothstep',
+            animated: true,
+            style: { stroke: '#26a69a', strokeWidth: 2 },
+          },
+        ];
+        
+        setEdges(triageEdges);
       } catch (error) {
         console.error('❌ Error loading items:', error);
       }
