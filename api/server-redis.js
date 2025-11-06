@@ -2053,6 +2053,20 @@ app.post("/api/send-to-easl", (req, res) => {
     client.write(`data: ${JSON.stringify({ query, metadata })}\n\n`);
   });
 
+  // Also broadcast focus event to focus on EASL iframe
+  const focusPayload = {
+    event: "focus",
+    itemId: "iframe-item-easl-interface",
+    focusOptions: {
+      zoom: 0.7,
+      highlight: false,
+      duration: 1000,
+      scrollIntoView: true,
+    },
+    timestamp: new Date().toISOString(),
+  };
+  broadcastSSE(focusPayload);
+
   res.json({
     success: true,
     message: "Query sent to EASL",
