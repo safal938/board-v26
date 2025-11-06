@@ -14,6 +14,7 @@ import SingleEncounterDocument from "./encounters/SingleEncounterDocument";
 import RawClinicalNote from "./encounters/RawClinicalNote";
 import ICELabData from "./encounters/ICELabData";
 import DoctorNote from "./DoctorNote";
+import AlertModal from "./AlertModal";
 // Types removed for Storybook compatibility
 
 const ItemContainer = styled(motion.div)`
@@ -397,6 +398,16 @@ const BoardItem = ({ item, isSelected, onUpdate, onDelete, onSelect, zoom = 1 })
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [lastPosition, setLastPosition] = useState({ x: item.x, y: item.y });
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    message: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+  }>({
+    isOpen: false,
+    message: '',
+    type: 'info'
+  });
   const textareaRef = useRef(null);
 
   const handleMouseDown = useCallback(
@@ -931,6 +942,206 @@ const BoardItem = ({ item, isSelected, onUpdate, onDelete, onSelect, zoom = 1 })
           </div>
         );
 
+      case "image":
+        return (
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              overflow: "hidden",
+              borderRadius: "12px",
+              background: "#f5f5f5",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {item.imageUrl || item.imageData ? (
+              <img
+                src={item.imageUrl || item.imageData}
+                alt={item.title || "Board image"}
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                  objectFit: "contain",
+                  borderRadius: "8px",
+                }}
+              />
+            ) : (
+              <div style={{ color: "#999", fontSize: "14px" }}>
+                No image loaded
+              </div>
+            )}
+          </div>
+        );
+
+      case "button":
+        return (
+          <>
+            <button
+              onClick={() => {
+                if (item.buttonAction === "clearChats") {
+                  setShowClearModal(true);
+                }
+              }}
+              style={{
+                width: "100%",
+                height: "100%",
+                padding: "8px 16px",
+                border: "none",
+                borderRadius: "8px",
+                background: item.buttonColor || "#dc2626",
+                color: "white",
+                fontSize: "13px",
+                fontWeight: "600",
+                cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15)",
+                transition: "all 0.2s ease",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.25)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.15)";
+              }}
+            >
+              {item.buttonIcon && <span style={{ fontSize: "14px" }}>{item.buttonIcon}</span>}
+              {item.buttonText || "Button"}
+            </button>
+
+            {/* Confirmation Modal */}
+            {showClearModal && (
+              <div
+                style={{
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: "rgba(0, 0, 0, 0.5)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 10000,
+                }}
+                onClick={() => setShowClearModal(false)}
+              >
+                <div
+                  style={{
+                    background: "white",
+                    borderRadius: "12px",
+                    padding: "32px",
+                    maxWidth: "400px",
+                    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h2 style={{ margin: "0 0 16px 0", fontSize: "20px", fontWeight: "700", color: "#dc2626" }}>
+                    ⚠️ Clear Chat History
+                  </h2>
+                  <p style={{ margin: "0 0 24px 0", fontSize: "14px", color: "#374151", lineHeight: "1.5" }}>
+                    Are you sure you want to clear all chat history? This action cannot be undone.
+                  </p>
+                  <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                    <button
+                      onClick={() => setShowClearModal(false)}
+                      style={{
+                        padding: "10px 20px",
+                        border: "1px solid #d1d5db",
+                        borderRadius: "6px",
+                        background: "white",
+                        color: "#374151",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "#f3f4f6";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "white";
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const easlIframe = document.querySelector('[data-item-id="iframe-item-easl-interface"] iframe') as HTMLIFrameElement;
+                        
+                        if (!easlIframe || !easlIframe.contentWindow) {
+                          setAlertModal({
+                            isOpen: true,
+                            message: 'EASL interface not found. Please make sure it is loaded on the board.',
+                            type: 'error'
+                          });
+                          setShowClearModal(false);
+                          return;
+                        }
+
+                        // Send clear chats message to EASL iframe
+                        easlIframe.contentWindow.postMessage({
+                          type: 'CLEAR_CHATS',
+                          payload: { timestamp: new Date().toISOString() }
+                        }, 'https://easl-board.vercel.app');
+                        
+                        console.log('🗑️ Clear chats request sent to EASL');
+
+                        // Also clear conversation history on backend
+                        try {
+                          const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 
+                            (window.location.hostname === 'localhost' ? 'http://localhost:3001' : window.location.origin);
+                          
+                          const response = await fetch(`${API_BASE_URL}/api/easl-reset`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' }
+                          });
+
+                          if (response.ok) {
+                            const data = await response.json();
+                            console.log(`✅ Conversation history cleared: ${data.previousCount} conversations removed`);
+                          } else {
+                            console.error('❌ Failed to clear conversation history');
+                          }
+                        } catch (error) {
+                          console.error('❌ Error clearing conversation history:', error);
+                        }
+                        
+                        setShowClearModal(false);
+                      }}
+                      style={{
+                        padding: "10px 20px",
+                        border: "none",
+                        borderRadius: "6px",
+                        background: "#dc2626",
+                        color: "white",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "#b91c1c";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "#dc2626";
+                      }}
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        );
+
       default:
         return null;
     }
@@ -957,21 +1168,23 @@ const BoardItem = ({ item, isSelected, onUpdate, onDelete, onSelect, zoom = 1 })
           item.type === "todo" ||
           item.type === "lab-result" ||
           item.type === "component" ||
-          item.type === "ehr-data"
+          item.type === "ehr-data" ||
+          item.type === "image"
             ? item.height === "auto"
               ? "200px"
               : item.height
             : "auto",
         transform: `rotate(${item.rotation}deg)`,
-        backgroundColor: item.color,
-        border: isSelected ? "2px solid #2196f3" : "1px solid rgba(0,0,0,0.1)",
-        boxShadow: isSelected
+        backgroundColor: item.type === "button" ? "transparent" : item.color,
+        border: item.type === "button" ? "none" : (isSelected ? "2px solid #2196f3" : "1px solid rgba(0,0,0,0.1)"),
+        boxShadow: item.type === "button" ? "none" : (isSelected
           ? "0 4px 20px rgba(33, 150, 243, 0.3)"
-          : "0 2px 8px rgba(0,0,0,0.1)",
+          : "0 2px 8px rgba(0,0,0,0.1)"),
+        cursor: item.type === "button" ? "default" : "move",
       }}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseDown={item.type === "button" ? undefined : handleMouseDown}
+      onMouseUp={item.type === "button" ? undefined : handleMouseUp}
+      onMouseLeave={item.type === "button" ? undefined : handleMouseUp}
       onKeyDown={handleKeyDown}
       tabIndex={0}
       initial={{ opacity: 0, scale: 0.8 }}
@@ -979,11 +1192,11 @@ const BoardItem = ({ item, isSelected, onUpdate, onDelete, onSelect, zoom = 1 })
       exit={{ opacity: 0, scale: 0.8 }}
       transition={{ duration: 0.2 }}
       // Disable hover/tap animations during drag for better performance
-      whileHover={isDragging ? {} : { scale: 1.02 }}
-      whileTap={isDragging ? {} : { scale: 0.98 }}
+      whileHover={isDragging || item.type === "button" ? {} : { scale: 1.02 }}
+      whileTap={isDragging || item.type === "button" ? {} : { scale: 0.98 }}
     >
       {renderContent()}
-      {isSelected && (
+      {isSelected && item.type !== "button" && (
         <DeleteButton
           onClick={(e) => {
             e.stopPropagation();
@@ -994,6 +1207,14 @@ const BoardItem = ({ item, isSelected, onUpdate, onDelete, onSelect, zoom = 1 })
           ×
         </DeleteButton>
       )}
+      
+      {/* Alert Modal */}
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal({ ...alertModal, isOpen: false })}
+        message={alertModal.message}
+        type={alertModal.type}
+      />
     </ItemContainer>
   );
 };

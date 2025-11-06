@@ -83,18 +83,6 @@
       "gradient": "linear-gradient(135deg, rgba(255, 107, 107, 0.1) 0%, rgba(238, 82, 83, 0.15) 50%, rgba(255, 107, 107, 0.1) 100%)",
       "borderGradient": "linear-gradient(135deg, #EE5253 0%, #FF6B6B 100%)",
       "description": "AI-powered chat interface for clinical queries and assistance"
-    },
-    {
-      "name": "components-test-zone",
-      "label": "Components Test Zone",
-      "x": -2200,
-      "y": -2000,
-      "width": 2000,
-      "height": 1800,
-      "color": "#9C27B0",
-      "gradient": "linear-gradient(135deg, rgba(156, 39, 176, 0.1) 0%, rgba(142, 36, 170, 0.15) 50%, rgba(156, 39, 176, 0.1) 100%)",
-      "borderGradient": "linear-gradient(135deg, #8E24AA 0%, #9C27B0 100%)",
-      "description": "Testing area for triage flow components and visualizations"
     }
   ],
   "settings": {

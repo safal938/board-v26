@@ -1993,90 +1993,21 @@
     "updatedAt": "2025-10-28T12:00:00.000Z"
   },
   {
-    "id": "triage-node-main",
-    "type": "triageFlow",
-    "x": -2000,
-    "y": -1800,
-    "width": 200,
-    "height": 200,
-    "data": {
-      "label": "Triage Inbox",
-      "count": 12.5,
-      "type": "triage"
-    },
-    "createdAt": "2025-11-05T12:00:00.000Z",
-    "updatedAt": "2025-11-05T12:00:00.000Z"
-  },
-  {
-    "id": "triage-node-category-alf",
-    "type": "triageFlow",
-    "x": -1600,
-    "y": -1900,
-    "width": 250,
-    "height": 300,
-    "data": {
-      "label": "ALF Category",
-      "count": 45,
-      "type": "category",
-      "metrics": {
-        "ALF": 12,
-        "SAH": 8,
-        "DILI": 15,
-        "HE": 10
-      }
-    },
-    "createdAt": "2025-11-05T12:00:00.000Z",
-    "updatedAt": "2025-11-05T12:00:00.000Z"
-  },
-  {
-    "id": "triage-node-category-sah",
-    "type": "triageFlow",
-    "x": -1600,
-    "y": -1500,
-    "width": 250,
-    "height": 300,
-    "data": {
-      "label": "SAH Category",
-      "count": 32,
-      "type": "category",
-      "metrics": {
-        "ALF": 5,
-        "SAH": 18,
-        "DILI": 6,
-        "HE": 3
-      }
-    },
-    "createdAt": "2025-11-05T12:00:00.000Z",
-    "updatedAt": "2025-11-05T12:00:00.000Z"
-  },
-  {
-    "id": "triage-node-grid-alf",
-    "type": "triageFlow",
-    "x": -1200,
-    "y": -1900,
-    "width": 300,
-    "height": 300,
-    "data": {
-      "label": "ALF Patients",
-      "gridSize": 45,
-      "type": "grid"
-    },
-    "createdAt": "2025-11-05T12:00:00.000Z",
-    "updatedAt": "2025-11-05T12:00:00.000Z"
-  },
-  {
-    "id": "triage-node-grid-sah",
-    "type": "triageFlow",
-    "x": -1200,
-    "y": -1500,
-    "width": 300,
-    "height": 300,
-    "data": {
-      "label": "SAH Patients",
-      "gridSize": 32,
-      "type": "grid"
-    },
-    "createdAt": "2025-11-05T12:00:00.000Z",
-    "updatedAt": "2025-11-05T12:00:00.000Z"
+    "id": "clear-chats-button",
+    "type": "button",
+    "x": -450,
+    "y": 20,
+    "width": 150,
+    "height": 45,
+    "buttonText": "Clear Chats",
+    "buttonIcon": "",
+    "buttonAction": "clearChats",
+    "buttonColor": "#dc2626",
+    "color": "transparent",
+    "rotation": 0,
+    "draggable": false,
+    "selectable": false,
+    "createdAt": "2025-01-31T12:00:00.000Z",
+    "updatedAt": "2025-01-31T12:00:00.000Z"
   }
 ]

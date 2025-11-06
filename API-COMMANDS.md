@@ -111,6 +111,57 @@ curl -X POST http://localhost:3001/api/enhanced-todo \
   }'
 ```
 
+### Update TODO Status
+
+Update the status of a task or subtask dynamically:
+
+**Update main task status:**
+
+```bash
+curl -X POST http://localhost:3001/api/update-todo-status \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "enhanced-todo-1762343556423-v4gsa50l1",
+    "task_id": "task-101",
+    "index": "",
+    "status": "executing"
+  }' | jq
+```
+
+**Update subtask status (by index):**
+
+```bash
+curl -X POST http://localhost:3001/api/update-todo-status \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "enhanced-todo-1762343556423-v4gsa50l1",
+    "task_id": "task-101",
+    "index": "0",
+    "status": "finished"
+  }' | jq
+```
+
+**Parameters:**
+- `id` (required): The todo item ID
+- `task_id` (required): The task ID within the todo
+- `index` (required): Empty string `""` for main task, or numeric string `"0"`, `"1"`, etc. for subtask index
+- `status` (required): One of `"pending"`, `"executing"`, or `"finished"`
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "Todo status updated successfully",
+  "item": { /* updated todo item */ },
+  "updated": {
+    "task_id": "task-101",
+    "index": "0",
+    "status": "finished"
+  }
+}
+```
+
 ---
 
 ## 4. Precision Focus System

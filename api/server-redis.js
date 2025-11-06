@@ -10,7 +10,8 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // Increase payload limit for images
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Redis client setup
 let redisClient = null;
@@ -1707,6 +1708,138 @@ app.post("/api/enhanced-todo", async (req, res) => {
   }
 });
 
+// POST /api/update-todo-status - Update task or subtask status dynamically
+app.post("/api/update-todo-status", async (req, res) => {
+  console.log("🔄 POST /api/update-todo-status - Updating todo status");
+
+  try {
+    const { id, task_id, index, status } = req.body;
+
+    // Validate required fields
+    if (!id || !task_id || status === undefined) {
+      return res.status(400).json({
+        error: "id, task_id, and status are required",
+      });
+    }
+
+    // Validate status value
+    const validStatuses = ["pending", "executing", "finished"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        error: "status must be one of: pending, executing, finished",
+      });
+    }
+
+    // Load existing items
+    const items = await loadBoardItems();
+
+    // Find the todo item by id
+    const itemIndex = items.findIndex((item) => item.id === id);
+
+    if (itemIndex === -1) {
+      return res.status(404).json({
+        error: `Todo item with id '${id}' not found`,
+      });
+    }
+
+    const todoItem = items[itemIndex];
+
+    // Validate that it's a todo type item
+    if (todoItem.type !== "todo" || !todoItem.todoData) {
+      return res.status(400).json({
+        error: "Item is not a valid todo item",
+      });
+    }
+
+    // Find the task by task_id
+    const taskIndex = todoItem.todoData.todos.findIndex(
+      (task) => task.id === task_id
+    );
+
+    if (taskIndex === -1) {
+      return res.status(404).json({
+        error: `Task with id '${task_id}' not found in todo item '${id}'`,
+      });
+    }
+
+    // Update status based on index parameter
+    if (index === "" || index === undefined || index === null) {
+      // Update main task status
+      todoItem.todoData.todos[taskIndex].status = status;
+      console.log(
+        `✅ Updated task '${task_id}' status to '${status}' in todo '${id}'`
+      );
+    } else {
+      // Update subtask status
+      const subTaskIndex = parseInt(index, 10);
+
+      if (isNaN(subTaskIndex)) {
+        return res.status(400).json({
+          error: "index must be a valid number or empty string",
+        });
+      }
+
+      const task = todoItem.todoData.todos[taskIndex];
+
+      if (!task.subTodos || !Array.isArray(task.subTodos)) {
+        return res.status(404).json({
+          error: `Task '${task_id}' does not have subtasks`,
+        });
+      }
+
+      if (subTaskIndex < 0 || subTaskIndex >= task.subTodos.length) {
+        return res.status(404).json({
+          error: `Subtask index ${subTaskIndex} is out of range (0-${
+            task.subTodos.length - 1
+          })`,
+        });
+      }
+
+      task.subTodos[subTaskIndex].status = status;
+      console.log(
+        `✅ Updated subtask at index ${subTaskIndex} of task '${task_id}' status to '${status}' in todo '${id}'`
+      );
+    }
+
+    // Update the item's updatedAt timestamp
+    todoItem.updatedAt = new Date().toISOString();
+
+    // Save updated items
+    await saveBoardItems(items);
+
+    // Broadcast update to all connected clients via SSE
+    const payload = {
+      event: "item-updated",
+      item: todoItem,
+      timestamp: new Date().toISOString(),
+      action: "status-updated",
+      details: {
+        task_id,
+        index: index === "" ? null : index,
+        status,
+      },
+    };
+    broadcastSSE(payload);
+
+    res.json({
+      success: true,
+      message: "Todo status updated successfully",
+      item: todoItem,
+      updated: {
+        task_id,
+        index: index === "" ? null : index,
+        status,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error updating todo status:", error);
+    res.status(500).json({
+      error: "Failed to update todo status",
+      message: error.message,
+    });
+  }
+});
+
 // POST /api/doctor-notes - Create a new doctor's note
 app.post("/api/doctor-notes", async (req, res) => {
   console.log("📝 POST /api/doctor-notes - Creating doctor's note");
@@ -1772,6 +1905,84 @@ app.post("/api/doctor-notes", async (req, res) => {
     console.error("❌ Error creating doctor's note:", error);
     res.status(500).json({
       error: "Failed to create doctor's note",
+      message: error.message,
+    });
+  }
+});
+
+// POST /api/images - Create a new image board item
+app.post("/api/images", async (req, res) => {
+  console.log("🖼️ POST /api/images - Creating image item");
+
+  try {
+    const { imageData, imageUrl, title, x, y, width, height } = req.body || {};
+
+    // Validate that either imageData or imageUrl is provided
+    if (!imageData && !imageUrl) {
+      return res.status(400).json({
+        error: "Either imageData (base64) or imageUrl is required",
+      });
+    }
+
+    // Generate unique ID
+    const imageId = `image-${Date.now()}`;
+
+    // Determine position - use provided or find optimal position
+    const imageX = x !== undefined ? x : 100;
+    const imageY = y !== undefined ? y : 100;
+    const imageWidth = width || 400;
+    const imageHeight = height || 300;
+
+    // Create image item
+    const imageItem = {
+      id: imageId,
+      type: "image",
+      x: imageX,
+      y: imageY,
+      width: imageWidth,
+      height: imageHeight,
+      imageData: imageData || null, // Base64 encoded image
+      imageUrl: imageUrl || null, // External URL
+      title: title || "Image",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Load existing items
+    const items = await loadBoardItems();
+
+    // If no position specified, find non-overlapping position
+    if (x === undefined || y === undefined) {
+      const position = findNonOverlappingPosition(imageItem, items);
+      imageItem.x = position.x;
+      imageItem.y = position.y;
+    }
+
+    // Add to items
+    items.push(imageItem);
+
+    // Save to storage
+    await saveBoardItems(items);
+
+    console.log(
+      `✅ Created image item: ${imageId} at (${imageItem.x}, ${imageItem.y})`
+    );
+
+    // Broadcast to SSE clients
+    broadcastSSE({
+      type: "new-item",
+      item: imageItem,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Image item created successfully",
+      item: imageItem,
+    });
+  } catch (error) {
+    console.error("❌ Error creating image item:", error);
+    res.status(500).json({
+      error: "Failed to create image item",
       message: error.message,
     });
   }

@@ -14,10 +14,12 @@ import ReactFlow, {
 } from 'reactflow';
 import styled from 'styled-components';
 import 'reactflow/dist/style.css';
+import { FileText, Image as ImageIcon, X, Plus, Mic, MicOff } from 'lucide-react';
 import zoneConfig from '../data/zone-config.json';
 import boardItemsData from '../data/boardItems.json';
 import BoardItem from './BoardItem';
 import TriageFlowNode from './TriageFlowNode';
+import AlertModal from './AlertModal';
 
 interface ZoneContainerProps {
   color: string;
@@ -166,6 +168,17 @@ function Canvas2() {
     remainingCount?: number;
     error?: string;
   } | null>(null);
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    message: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+  }>({
+    isOpen: false,
+    message: '',
+    type: 'info'
+  });
   const reactFlowInstance = useRef<any>(null);
 
   // Get API base URL
@@ -338,8 +351,8 @@ function Canvas2() {
             type: nodeType,
             position: { x: item.x, y: item.y },
             data: nodeData,
-            draggable: true,
-            selectable: item.type !== 'triageFlow',
+            draggable: item.draggable !== false,
+            selectable: item.selectable !== false && item.type !== 'triageFlow',
             zIndex: 1,
           };
         });
@@ -681,6 +694,8 @@ function Canvas2() {
 
   // Add new note function
   const handleAddNote = useCallback(async () => {
+    setShowAddMenu(false); // Close menu
+    
     try {
       const response = await fetch(`${API_BASE_URL}/api/doctor-notes`, {
         method: 'POST',
@@ -699,6 +714,226 @@ function Canvas2() {
     }
   }, [API_BASE_URL]);
 
+  // Helper function to compress and upload image
+  const compressAndUploadImage = useCallback(async (file: File, title: string) => {
+    return new Promise<void>((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = async (e) => {
+        const img = new Image();
+        img.onload = async () => {
+          // Create canvas for compression
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+          }
+
+          // Calculate dimensions (max 1920px width/height)
+          let width = img.width;
+          let height = img.height;
+          const maxSize = 1920;
+
+          if (width > maxSize || height > maxSize) {
+            if (width > height) {
+              height = (height / width) * maxSize;
+              width = maxSize;
+            } else {
+              width = (width / height) * maxSize;
+              height = maxSize;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          // Draw and compress
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Convert to base64 with compression (0.8 quality for JPEG)
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+          
+          console.log(`📦 Compressed image: ${(file.size / 1024).toFixed(0)}KB → ${(compressedBase64.length / 1024).toFixed(0)}KB`);
+
+          try {
+            // Upload to API
+            const response = await fetch(`${API_BASE_URL}/api/images`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                imageData: compressedBase64,
+                title: title,
+                width: Math.min(width, 400),
+                height: Math.min(height, 300)
+              })
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              console.log('✅ Image created:', data.item.id);
+              resolve();
+            } else {
+              const error = await response.text();
+              console.error('❌ Failed to create image:', error);
+              reject(new Error('Failed to create image'));
+            }
+          } catch (error) {
+            console.error('❌ Upload error:', error);
+            reject(error);
+          }
+        };
+
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = e.target?.result as string;
+      };
+
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+  }, [API_BASE_URL]);
+
+  // Mute/Unmute agent function
+  const handleToggleMute = useCallback(async () => {
+    try {
+      console.log(`🎤 ${isMuted ? 'Unmuting' : 'Muting'} agent...`);
+      
+      const response = await fetch('https://api2.medforce-ai.com/mute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle mute');
+      }
+
+      const result = await response.json();
+      console.log('✅ Mute toggle response:', result);
+      
+      // Toggle the mute state
+      setIsMuted(!isMuted);
+    } catch (error) {
+      console.error('❌ Failed to toggle mute:', error);
+      setAlertModal({
+        isOpen: true,
+        message: 'Failed to toggle mute. Please try again.',
+        type: 'error'
+      });
+    }
+  }, [isMuted]);
+
+  // Add image function
+  const handleAddImage = useCallback(() => {
+    setShowAddMenu(false); // Close menu
+    
+    // Create hidden file input
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    
+    input.onchange = async (e: any) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      try {
+        await compressAndUploadImage(file, file.name);
+      } catch (error) {
+        console.error('❌ Failed to upload image:', error);
+        setAlertModal({
+          isOpen: true,
+          message: 'Failed to upload image. Please try a smaller file.',
+          type: 'error'
+        });
+      }
+    };
+    
+    input.click();
+  }, [API_BASE_URL, compressAndUploadImage]);
+
+  // Handle paste event for images
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        
+        // Check if item is an image
+        if (item.type.indexOf('image') !== -1) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (!file) continue;
+
+          console.log('📋 Pasting image from clipboard');
+          
+          try {
+            await compressAndUploadImage(file, 'Pasted Image');
+          } catch (error) {
+            console.error('❌ Failed to paste image:', error);
+            setAlertModal({
+              isOpen: true,
+              message: 'Failed to paste image. Please try again.',
+              type: 'error'
+            });
+          }
+          
+          break; // Only handle first image
+        }
+      }
+    };
+
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [compressAndUploadImage]);
+
+  // Handle drag and drop for images
+  useEffect(() => {
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    };
+
+    const handleDrop = async (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+
+      // Process all dropped image files
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        // Check if file is an image
+        if (file.type.startsWith('image/')) {
+          console.log('🖼️ Dropped image:', file.name);
+          
+          try {
+            await compressAndUploadImage(file, file.name);
+          } catch (error) {
+            console.error('❌ Failed to upload dropped image:', error);
+          }
+        }
+      }
+    };
+
+    // Add listeners to the document
+    document.addEventListener('dragover', handleDragOver);
+    document.addEventListener('drop', handleDrop);
+
+    return () => {
+      document.removeEventListener('dragover', handleDragOver);
+      document.removeEventListener('drop', handleDrop);
+    };
+  }, [compressAndUploadImage]);
+
   // Reset board function
   const handleResetBoard = useCallback(async () => {
     try {
@@ -715,7 +950,8 @@ function Canvas2() {
         return (
           id.startsWith('enhanced') ||
           id.startsWith('item') ||
-          id.startsWith('doctor-note')
+          id.startsWith('doctor-note') ||
+          id.startsWith('image-')
         );
       });
       
@@ -802,9 +1038,27 @@ function Canvas2() {
       }
 
       if (event.data?.type === 'EASL_RESPONSE') {
-        const { response, timestamp } = event.data.payload;
+        const { response, status, timestamp } = event.data.payload;
         console.log('📥 Received response from EASL:', response);
-        // Handle the response (could create a board item, show notification, etc.)
+        
+        // Handle clear chats response
+        if (response.success !== undefined) {
+          if (response.success) {
+            console.log('✅ Chat history cleared successfully');
+            setAlertModal({
+              isOpen: true,
+              message: 'Chat history cleared successfully!',
+              type: 'success'
+            });
+          } else {
+            console.error('❌ Failed to clear chats:', response.error);
+            setAlertModal({
+              isOpen: true,
+              message: `Failed to clear chat history: ${response.error || 'Unknown error'}`,
+              type: 'error'
+            });
+          }
+        }
       }
     };
 
@@ -876,6 +1130,20 @@ function Canvas2() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
+      <style>
+        {`
+          @keyframes slideUp {
+            from {
+              opacity: 0;
+              transform: translateY(10px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+        `}
+      </style>
       <ReactFlowWrapper>
         <ReactFlow
           nodes={nodes}
@@ -912,59 +1180,193 @@ function Canvas2() {
         gap: '8px',
         zIndex: 1000,
       }}>
+        {/* Add Menu Dropdown */}
+        {showAddMenu && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '100%',
+              right: '0',
+              marginBottom: '8px',
+              background: 'white',
+              borderRadius: '8px',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+              overflow: 'hidden',
+              minWidth: '180px',
+              zIndex: 1001,
+              animation: 'slideUp 0.2s ease',
+            }}
+          >
+            <button
+              onClick={handleAddNote}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                fontSize: '14px',
+                color: '#374151',
+                transition: 'background 0.15s ease',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#f3f4f6';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <FileText size={18} style={{ color: '#6b7280' }} />
+              <span>Add Note</span>
+            </button>
+            <button
+              onClick={handleAddImage}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                fontSize: '14px',
+                color: '#374151',
+                transition: 'background 0.15s ease',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#f3f4f6';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <ImageIcon size={18} style={{ color: '#6b7280' }} />
+              <span>Add Image</span>
+            </button>
+          </div>
+        )}
+
+        {/* Plus Button */}
         <button
-          onClick={handleAddNote}
+          onClick={() => setShowAddMenu(!showAddMenu)}
           style={{
             width: '44px',
             height: '44px',
             border: 'none',
             borderRadius: '8px',
-            background: 'linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)',
-            color: 'white',
-            fontSize: '20px',
+            background: '#ffffffff',
+            color: 'black',
             cursor: 'pointer',
-            boxShadow: '0 2px 12px rgba(6, 182, 212, 0.3)',
+            boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)',
             transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
-          title="Add Doctor's Note"
+          title="Add Item"
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = 'translateY(-1px)';
-            e.currentTarget.style.boxShadow = '0 4px 16px rgba(6, 182, 212, 0.4)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.4)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 2px 12px rgba(6, 182, 212, 0.3)';
+            e.currentTarget.style.boxShadow = '0 2px 8px rgba(59, 130, 246, 0.3)';
           }}
         >
-          📝
+          <Plus size={20} style={{ 
+            transform: showAddMenu ? 'rotate(45deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s ease'
+          }} />
         </button>
+
+        {/* Mute/Unmute Button */}
+        <button
+          onClick={handleToggleMute}
+          style={{
+            width: '44px',
+            height: '44px',
+            border: '1px solid #e5e7eb',
+            borderRadius: '8px',
+            background: 'white',
+            cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          title={isMuted ? 'Unmute Agent' : 'Mute Agent'}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-1px)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+          }}
+        >
+          {isMuted ? (
+            <MicOff size={20} style={{ color: '#ef4444' }} />
+          ) : (
+            <Mic size={20} style={{ color: '#10b981' }} />
+          )}
+        </button>
+
+        {/* Reset Button */}
         <button
           onClick={() => setShowResetModal(true)}
           style={{
             width: '44px',
             height: '44px',
-            border: 'none',
+            border: '1px solid #e5e7eb',
             borderRadius: '8px',
-            background: 'linear-gradient(135deg, #ffffff 0%, #ffffff 100%)',
-            color: 'black',
-            fontSize: '20px',
+            background: 'white',
+            color: '#6b7280',
             cursor: 'pointer',
-            boxShadow: '0 4px 16px rgba(149, 147, 147, 0.4)',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
             transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
           title="Reset Board (Delete All API Items)"
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = 'translateY(-1px)';
-            e.currentTarget.style.boxShadow = '0 4px 16px rgba(220, 38, 38, 0.4)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.3)';
+            e.currentTarget.style.color = '#dc2626';
+            e.currentTarget.style.borderColor = '#fca5a5';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 4px 16px rgba(149, 147, 147, 0.4)';
+            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+            e.currentTarget.style.color = '#6b7280';
+            e.currentTarget.style.borderColor = '#e5e7eb';
           }}
         >
-          ✕
+          <X size={20} />
         </button>
       </div>
+
+      {/* Click outside to close menu */}
+      {showAddMenu && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 999,
+          }}
+          onClick={() => setShowAddMenu(false)}
+        />
+      )}
       
       
 
@@ -1139,6 +1541,14 @@ function Canvas2() {
           </div>
         </div>
       )}
+      
+      {/* Alert Modal */}
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal({ ...alertModal, isOpen: false })}
+        message={alertModal.message}
+        type={alertModal.type}
+      />
     </div>
   );
 }
