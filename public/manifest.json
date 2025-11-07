@@ -1,0 +1,19 @@
+{
+  "addOns": {
+    "common": {
+      "name": "MedForce_DILI_L1_v2.6",
+      "logoUrl": "https://boardv26.vercel.app/logo.png"
+    },
+    "meet": {
+      "web": {
+        "supportsScreenSharing": true,
+        "logoUrl": "https://boardv26.vercel.app/logo.png",
+        "addOnOrigins": ["https://boardv26.vercel.app"],
+        "sidePanelUrl": "https://boardv26.vercel.app/meet/Sidepanel"
+      }
+    },
+    "httpOptions": {
+      "granularOauthPermissionSupport": "OPT_IN"
+    }
+  }
+}

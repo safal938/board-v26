@@ -1,0 +1,118 @@
+{
+  "name": "canvas-storybook",
+  "version": "1.0.0",
+  "description": "A Miro-like board application with focus object feature and Storybook integration",
+  "private": true,
+  "dependencies": {
+    "@googleworkspace/meet-addons": "^1.2.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/styled-components": "^5.1.0",
+    "ajv": "^8.17.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "framer-motion": "^10.16.0",
+    "lucide-react": "^0.552.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^7.9.4",
+    "react-scripts": "5.0.1",
+    "react-spring": "^9.7.0",
+    "reactflow": "^11.11.4",
+    "redis": "^4.7.1",
+    "styled-components": "^6.0.0",
+    "typescript": "^4.9.5",
+    "web-vitals": "^3.0.0"
+  },
+  "devDependencies": {
+    "@storybook/addon-essentials": "^7.5.0",
+    "@storybook/addon-interactions": "^7.5.0",
+    "@storybook/addon-links": "^7.5.0",
+    "@storybook/blocks": "^7.5.0",
+    "@storybook/react": "^7.5.0",
+    "@storybook/react-webpack5": "^7.5.0",
+    "@storybook/testing-library": "^0.2.0",
+    "concurrently": "^8.2.2",
+    "storybook": "^7.5.0"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "vercel-build": "npm run build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "server": "node api/server.js",
+    "server-redis": "node api/server-redis.js",
+    "dev": "concurrently \"npm run server-redis\" \"npm start\"",
+    "dev-file": "concurrently \"npm run server\" \"npm start\"",
+    "install-server": "npm install express cors",
+    "test-api": "node test-api.js",
+    "test-enhanced": "node test-enhanced-todo.js",
+    "test-ehr-data": "node test-ehr-data.js",
+    "test-redis": "node test-redis-connection.js"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ],
+    "rules": {
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "react-hooks/exhaustive-deps": "off",
+      "no-console": "off",
+      "no-debugger": "off",
+      "no-undef": "off",
+      "no-redeclare": "off",
+      "no-useless-escape": "off",
+      "no-empty-pattern": "off",
+      "no-unreachable": "off",
+      "no-constant-condition": "off",
+      "no-case-declarations": "off",
+      "no-prototype-builtins": "off",
+      "no-fallthrough": "off",
+      "no-irregular-whitespace": "off",
+      "no-extra-boolean-cast": "off",
+      "no-useless-catch": "off",
+      "no-empty": "off",
+      "no-cond-assign": "off",
+      "no-func-assign": "off",
+      "no-inner-declarations": "off",
+      "no-dupe-keys": "off",
+      "no-dupe-class-members": "off",
+      "no-duplicate-case": "off",
+      "no-ex-assign": "off",
+      "no-extra-semi": "off",
+      "no-mixed-spaces-and-tabs": "off",
+      "no-obj-calls": "off",
+      "no-octal": "off",
+      "no-regex-spaces": "off",
+      "no-self-assign": "off",
+      "no-sparse-arrays": "off",
+      "no-unexpected-multiline": "off",
+      "no-unsafe-finally": "off",
+      "no-unsafe-negation": "off",
+      "use-isnan": "off",
+      "valid-typeof": "off"
+    }
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "engines": {
+    "node": "20.x"
+  }
+}

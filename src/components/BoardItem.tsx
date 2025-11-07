@@ -1,0 +1,1189 @@
+import React, { useState, useRef, useCallback, useEffect } from "react";
+import styled from "styled-components";
+import { motion } from "framer-motion";
+import LabResult from "./LabResult";
+import PatientContext from "./dashboard/PatientContext";
+import MedicationTimeline from "./dashboard/MedicationTimeline";
+import AdverseEventAnalytics from "./dashboard/AdverseEventAnalytics";
+import LabTable from "./dashboard/LabTable";
+import LabChart from "./dashboard/LabChart";
+import DifferentialDiagnosis from "./dashboard/DifferentialDiagnosis";
+import EHRSystemComponent from "./encounters/EHRSystemComponent";
+import EncounterDocument from "./encounters/EncounterDocument";
+import SingleEncounterDocument from "./encounters/SingleEncounterDocument";
+import RawClinicalNote from "./encounters/RawClinicalNote";
+import ICELabData from "./encounters/ICELabData";
+import DoctorNote from "./DoctorNote";
+import AlertModal from "./AlertModal";
+// Types removed for Storybook compatibility
+
+const ItemContainer = styled(motion.div)`
+  position: absolute;
+  cursor: move;
+  border-radius: 12px;
+  user-select: none;
+  z-index: 10;
+  will-change: transform;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.2s ease;
+
+  &:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  }
+
+  &.selected {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5), 0 8px 24px rgba(0, 0, 0, 0.2);
+  }
+  
+  &.dragging {
+    cursor: grabbing !important;
+    transition: none;
+    z-index: 9999;
+    pointer-events: auto;
+  }
+  
+  /* Disable pointer events on other items when any item is being dragged */
+  body.is-dragging &:not(.dragging) {
+    pointer-events: none;
+  }
+`;
+
+const TextContent = styled.textarea`
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px;
+  color: #333;
+
+  &::placeholder {
+    color: #666;
+  }
+`;
+
+const ShapeContent = styled.div`
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: white;
+  font-weight: bold;
+`;
+
+const StickyContent = styled.div`
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  font-size: 14px;
+  color: #333;
+  overflow: hidden;
+  word-wrap: break-word;
+`;
+
+// ===== Todo Item Styles =====
+const TodoCard = styled.div`
+  width: 100%;
+  min-height: 100%;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: visible;
+`;
+
+const TodoHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #f7faff 0%, #eef5ff 100%);
+  border-bottom: 1px solid #e6eefb;
+`;
+
+const TodoTitle = styled.div`
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e3a8a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const TodoBody = styled.div`
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: visible;
+  flex-grow: 1;
+`;
+
+const TodoDesc = styled.div`
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.4;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+`;
+
+const ProgressBar = styled.div`
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 6px;
+  overflow: hidden;
+`;
+
+const ProgressFill = styled.div`
+  height: 100%;
+  background: linear-gradient(90deg, #34d399, #10b981);
+  transition: width 200ms ease;
+`;
+
+const TodoList = styled.ul`
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const TodoItem = styled.li`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #334155;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+`;
+
+const StatusChip = styled.span`
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+  background: #94a3b8;
+`;
+
+// ===== Agent Result Styles =====
+const AgentCard = styled.div`
+  width: 100%;
+  min-height: 100%;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: visible;
+`;
+
+const AgentHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #f6fffb 0%, #e9fbf3 100%);
+  border-bottom: 1px solid #dcfce7;
+`;
+
+const AgentTitle = styled.div`
+  font-size: 14px;
+  font-weight: 800;
+  color: #065f46;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const AgentBody = styled.div`
+  padding: 12px 14px;
+  overflow: visible;
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  flex-grow: 1;
+  
+  /* Fix markdown content overflow */
+  & * {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    max-width: 100%;
+  }
+  
+  /* Fix code blocks */
+  & pre {
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  
+  & code {
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+`;
+
+// ===== EHR Data Styles =====
+const EHRDataCard = styled.div`
+  width: 100%;
+  min-height: 100%;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: visible;
+`;
+
+const EHRDataHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+  border-bottom: 1px solid #e9d5ff;
+`;
+
+const EHRDataTitle = styled.div`
+  font-size: 14px;
+  font-weight: 800;
+  color: #581c87;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const EHRDataSource = styled.div`
+  font-size: 11px;
+  font-weight: 600;
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.1);
+  padding: 2px 8px;
+  border-radius: 12px;
+`;
+
+const EHRDataBody = styled.div`
+  padding: 12px 14px;
+  overflow: visible;
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  flex-grow: 1;
+`;
+
+const EHRDataType = styled.div`
+  font-size: 11px;
+  font-weight: 600;
+  color: #7c3aed;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+`;
+
+const EHRDataContent = styled.div`
+  color: #374151;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+`;
+
+const EHRDataTimestamp = styled.div`
+  font-size: 10px;
+  color: #9ca3af;
+  font-style: italic;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f3f4f6;
+`;
+
+// Very small markdown -> HTML converter (headings, bold, italic, code, lists)
+const toHtml = (md: string) => {
+  if (!md) return "";
+  const escape = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  let html = escape(md);
+  // code blocks ```
+  html = html.replace(
+    /```([\s\S]*?)```/g,
+    (_m, p1) => `<pre><code>${p1}</code></pre>`
+  );
+  // inline code `code`
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  // bold **text**
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  // italics *text* or _text_
+  html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  html = html.replace(/_([^_]+)_/g, "<em>$1</em>");
+  // headings # .. ######
+  html = html
+    .replace(/^######\s?(.+)$/gm, "<h6>$1</h6>")
+    .replace(/^#####\s?(.+)$/gm, "<h5>$1</h5>")
+    .replace(/^####\s?(.+)$/gm, "<h4>$1</h4>")
+    .replace(/^###\s?(.+)$/gm, "<h3>$1</h3>")
+    .replace(/^##\s?(.+)$/gm, "<h2>$1</h2>")
+    .replace(/^#\s?(.+)$/gm, "<h1>$1</h1>");
+  // lists - item
+  html = html.replace(/^(?:-\s.+\n?)+/gm, (block) => {
+    const items = block
+      .trim()
+      .split(/\n/)
+      .map((l) => l.replace(/^- ?/, "").trim());
+    return `<ul>${items.map((it) => `<li>${it}</li>`).join("")}</ul>`;
+  });
+  // newlines to <br> (basic)
+  html = html.replace(/\n/g, "<br/>");
+  return html;
+};
+
+// BoardItemProps interface removed for Storybook compatibility
+
+const BoardItem = ({ item, isSelected, onUpdate, onDelete, onSelect, zoom = 1 }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [lastPosition, setLastPosition] = useState({ x: item.x, y: item.y });
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    message: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+  }>({
+    isOpen: false,
+    message: '',
+    type: 'info'
+  });
+  const textareaRef = useRef(null);
+
+  const handleMouseDown = useCallback(
+    (e) => {
+      e.stopPropagation();
+      onSelect(item.id);
+
+      if (e.detail === 2) {
+        // Double click
+        if (item.type === "text") {
+          setIsEditing(true);
+          setTimeout(() => textareaRef.current?.focus(), 0);
+        }
+      } else {
+        setIsDragging(true);
+        // Add global dragging class to body
+        document.body.classList.add('is-dragging');
+        document.body.style.cursor = 'grabbing';
+        // Store the initial mouse position in screen space and item position in world space
+        setDragStart({
+          x: e.clientX,
+          y: e.clientY,
+        });
+        setLastPosition({ x: item.x, y: item.y });
+      }
+    },
+    [item.id, item.type, item.x, item.y, onSelect]
+  );
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    // Remove global dragging class from body
+    document.body.classList.remove('is-dragging');
+    document.body.style.cursor = '';
+  }, []);
+
+  // Use global mouse event listeners for better performance
+  useEffect(() => {
+    let rafId = null;
+    let pendingUpdate = null;
+
+    const handleGlobalMouseMove = (e) => {
+      if (isDragging) {
+        e.preventDefault();
+        
+        // Calculate mouse delta in screen space from initial drag start
+        const deltaScreenX = e.clientX - dragStart.x;
+        const deltaScreenY = e.clientY - dragStart.y;
+        
+        // Convert screen space delta to world space by dividing by zoom
+        const deltaWorldX = deltaScreenX / zoom;
+        const deltaWorldY = deltaScreenY / zoom;
+        
+        // Calculate new position from initial position + world delta
+        pendingUpdate = {
+          x: lastPosition.x + deltaWorldX,
+          y: lastPosition.y + deltaWorldY
+        };
+
+        // Use requestAnimationFrame to batch updates
+        if (!rafId) {
+          rafId = requestAnimationFrame(() => {
+            if (pendingUpdate) {
+              const { x: newX, y: newY } = pendingUpdate;
+              
+              // Round to avoid sub-pixel jitter
+              const roundedX = Math.round(newX);
+              const roundedY = Math.round(newY);
+              
+              onUpdate(item.id, { x: roundedX, y: roundedY });
+              
+              pendingUpdate = null;
+            }
+            rafId = null;
+          });
+        }
+      }
+    };
+
+    const handleGlobalMouseUp = () => {
+      setIsDragging(false);
+      // Remove global dragging class from body
+      document.body.classList.remove('is-dragging');
+      document.body.style.cursor = '';
+      // Cancel any pending animation frame
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    };
+
+    if (isDragging) {
+      document.addEventListener("mousemove", handleGlobalMouseMove, {
+        passive: false,
+      });
+      document.addEventListener("mouseup", handleGlobalMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener("mousemove", handleGlobalMouseMove);
+      document.removeEventListener("mouseup", handleGlobalMouseUp);
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
+      // Cleanup: ensure body class is removed
+      if (isDragging) {
+        document.body.classList.remove('is-dragging');
+        document.body.style.cursor = '';
+      }
+    };
+  }, [isDragging, dragStart, lastPosition, item.id, onUpdate, zoom]);
+
+  const handleTextChange = useCallback(
+    (e) => {
+      onUpdate(item.id, { content: e.target.value });
+    },
+    [item.id, onUpdate]
+  );
+
+  const handleTextBlur = useCallback(() => {
+    setIsEditing(false);
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        setIsEditing(false);
+      }
+      if (e.key === "Escape") {
+        setIsEditing(false);
+      }
+      if (e.key === "Delete" && isSelected) {
+        onDelete(item.id);
+      }
+    },
+    [isSelected, item.id, onDelete]
+  );
+
+  const renderContent = () => {
+    switch (item.type) {
+      case "text":
+        if (isEditing) {
+          return (
+            <TextContent
+              ref={textareaRef}
+              value={item.content}
+              onChange={handleTextChange}
+              onBlur={handleTextBlur}
+              onKeyDown={handleKeyDown}
+              placeholder="Enter text..."
+            />
+          );
+        }
+        return (
+          <TextContent
+            value={item.content}
+            readOnly
+            onDoubleClick={() => setIsEditing(true)}
+          />
+        );
+
+      case "shape":
+        return <ShapeContent>{item.content || "Shape"}</ShapeContent>;
+
+      case "sticky":
+        return <StickyContent>{item.content || "Sticky note"}</StickyContent>;
+
+      case "todo":
+        const todo = item.todoData || {
+          title: "Todos",
+          description: "",
+          todos: [],
+        };
+
+        // Calculate total tasks including sub-todos
+        const calculateTotalTasks = (todos) => {
+          return todos.reduce((total, t) => {
+            let count = 1; // Count the main todo
+            if (t.subTodos && t.subTodos.length > 0) {
+              count += t.subTodos.length; // Add sub-todos
+            }
+            return total + count;
+          }, 0);
+        };
+
+        // Calculate finished tasks including sub-todos
+        const calculateFinishedTasks = (todos) => {
+          return todos.reduce((finished, t) => {
+            let count = t.status === "finished" ? 1 : 0; // Count main todo if finished
+            if (t.subTodos && t.subTodos.length > 0) {
+              count += t.subTodos.filter(
+                (sub) => sub.status === "finished"
+              ).length;
+            }
+            return finished + count;
+          }, 0);
+        };
+
+        const total = calculateTotalTasks(todo.todos || []);
+        const finished = calculateFinishedTasks(todo.todos || []);
+        const progressPct =
+          total > 0 ? Math.round((finished / total) * 100) : 0;
+        const statusColor = (status) => {
+          switch (status) {
+            case "finished":
+              return "#10b981";
+            case "executing":
+              return "#3b82f6";
+            case "pending":
+              return "#64748b";
+            default:
+              return "#64748b";
+          }
+        };
+        const statusText = (status) => {
+          switch (status) {
+            case "finished":
+              return "FINISHED";
+            case "executing":
+              return "EXECUTING";
+            case "pending":
+              return "PENDING";
+            default:
+              return "PENDING";
+          }
+        };
+        return (
+          <TodoCard>
+            <TodoHeader>
+              <TodoTitle>✅ {todo.title || "Todo List"}</TodoTitle>
+              <div
+                style={{ fontSize: "11px", color: "#1e293b", fontWeight: 700 }}
+              >
+                {progressPct}%
+              </div>
+            </TodoHeader>
+            <TodoBody>
+              {todo.description ? (
+                <TodoDesc>{todo.description}</TodoDesc>
+              ) : null}
+              <ProgressBar>
+                <ProgressFill style={{ width: `${progressPct}%` }} />
+              </ProgressBar>
+              <TodoList>
+                {(todo.todos || []).map((t, idx) => (
+                  <div key={idx}>
+                    {/* Main todo item */}
+                    <TodoItem>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "4px",
+                          flex: 1,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                          }}
+                        >
+                          <span>{t.text}</span>
+                          {t.id && (
+                            <span
+                              style={{
+                                fontSize: "9px",
+                                color: "#94a3b8",
+                                fontFamily: "monospace",
+                                background: "#f1f5f9",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                border: "1px solid #e2e8f0",
+                              }}
+                            >
+                              ID: {t.id.split("-").pop()}
+                            </span>
+                          )}
+                        </div>
+                        {t.agent && (
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#64748b",
+                              fontStyle: "italic",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            🤖 Delegated to: <strong>{t.agent}</strong>
+                          </div>
+                        )}
+                      </div>
+                      <StatusChip style={{ background: statusColor(t.status) }}>
+                        {statusText(t.status)}
+                      </StatusChip>
+                    </TodoItem>
+
+                    {/* Sub-todos */}
+                    {t.subTodos && t.subTodos.length > 0 && (
+                      <div style={{ marginLeft: "20px", marginTop: "4px" }}>
+                        {t.subTodos.map((subTodo, subIdx) => (
+                          <TodoItem
+                            key={subIdx}
+                            style={{
+                              background: "#f1f5f9",
+                              border: "1px solid #e2e8f0",
+                              marginBottom: "4px",
+                              fontSize: "11px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "2px",
+                                flex: 1,
+                              }}
+                            >
+                              <span style={{ color: "#475569" }}>
+                                • {subTodo.text}
+                              </span>
+                            </div>
+                            <StatusChip
+                              style={{
+                                background: statusColor(subTodo.status),
+                                fontSize: "10px",
+                                padding: "1px 6px",
+                              }}
+                            >
+                              {statusText(subTodo.status)}
+                            </StatusChip>
+                          </TodoItem>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </TodoList>
+            </TodoBody>
+          </TodoCard>
+        );
+
+      case "agent":
+      case "agent_result":
+        const agent = item.agentData || {
+          title: item.title || "Agent Result",
+          markdown: item.markdown || "",
+        };
+        return (
+          <AgentCard>
+            <AgentHeader>
+              <AgentTitle>🤖 {agent.title || "Agent Result"}</AgentTitle>
+            </AgentHeader>
+            <AgentBody>
+              {/* Render simple markdown */}
+              <div
+                dangerouslySetInnerHTML={{
+                  __html: toHtml(agent.markdown || item.content || ""),
+                }}
+              />
+            </AgentBody>
+          </AgentCard>
+        );
+
+      case "lab-result":
+        const labData = item.labResultData;
+        if (!labData) {
+          return <div>Invalid lab result data</div>;
+        }
+        return (
+          <LabResult
+            id={item.id}
+            parameter={labData.parameter}
+            value={labData.value}
+            unit={labData.unit}
+            status={labData.status}
+            range={labData.range}
+            trend={labData.trend}
+            onEdit={() => console.log("Edit lab result:", item.id)}
+            onTrend={() => console.log("View trend for:", item.id)}
+            onReadMore={() => console.log("Read more about:", item.id)}
+          />
+        );
+
+      case "component":
+        const componentType = item.componentType;
+        const componentProps = item.content?.props || {};
+
+        switch (componentType) {
+          case "PatientContext":
+            return <PatientContext patientData={componentProps.patientData} />;
+
+          case "MedicationTimeline":
+            return (
+              <MedicationTimeline
+                encounters={componentProps.encounters || []}
+                medicationTimeline={componentProps.medicationTimeline || []}
+              />
+            );
+
+          case "AdverseEventAnalytics":
+            return (
+              <AdverseEventAnalytics patientData={componentProps.patientData} />
+            );
+
+          case "LabTable":
+            return <LabTable encounters={componentProps.encounters || []} />;
+
+          case "LabChart":
+            return (
+              <LabChart
+                encounters={componentProps.encounters || []}
+                medicationTimeline={componentProps.medicationTimeline || []}
+              />
+            );
+
+          case "DifferentialDiagnosis":
+            return (
+              <DifferentialDiagnosis patientData={componentProps.patientData} />
+            );
+
+          case "EHRSystemComponent":
+            return (
+              <EHRSystemComponent patientData={componentProps.patientData} />
+            );
+
+          case "EncounterDocument":
+            return (
+              <EncounterDocument patientData={componentProps.patientData} />
+            );
+
+          case "SingleEncounterDocument":
+            return (
+              <SingleEncounterDocument
+                encounter={componentProps.encounter}
+                patient={componentProps.patient}
+                encounterIndex={componentProps.encounterIndex}
+                dataSource={componentProps.dataSource}
+              />
+            );
+
+          case "RawClinicalNote":
+            return (
+              <RawClinicalNote
+                encounterNumber={componentProps.encounterNumber}
+                date={componentProps.date}
+                visitType={componentProps.visitType}
+                provider={componentProps.provider}
+                specialty={componentProps.specialty}
+                rawText={componentProps.rawText}
+                dataSource={componentProps.dataSource}
+              />
+            );
+
+          case "ICELabData":
+            return <ICELabData encounters={componentProps.encounters} />;
+
+          default:
+            return (
+              <div
+                style={{
+                  padding: "20px",
+                  background: "#f8f9fa",
+                  borderRadius: "8px",
+                }}
+              >
+                <h3 style={{ margin: "0 0 8px 0", color: "#333" }}>
+                  Unknown Component
+                </h3>
+                <p style={{ margin: 0, color: "#666", fontSize: "14px" }}>
+                  Component type "{componentType}" is not recognized
+                </p>
+              </div>
+            );
+        }
+
+      case "ehr-data":
+        return (
+          <EHRDataCard>
+            <EHRDataHeader>
+              <EHRDataTitle>🏥 {item.title || "EHR Data"}</EHRDataTitle>
+              <EHRDataSource>{item.source || "EHR System"}</EHRDataSource>
+            </EHRDataHeader>
+            <EHRDataBody>
+              <EHRDataType>{item.dataType || "clinical"}</EHRDataType>
+              <EHRDataContent>
+                {item.content || "No content available"}
+              </EHRDataContent>
+              {item.timestamp && (
+                <EHRDataTimestamp>
+                  Retrieved: {new Date(item.timestamp).toLocaleString()}
+                </EHRDataTimestamp>
+              )}
+            </EHRDataBody>
+          </EHRDataCard>
+        );
+
+      case "doctor-note":
+        return (
+          <DoctorNote
+            id={item.id}
+            noteData={item.noteData}
+            onUpdate={onUpdate}
+          />
+        );
+
+      case "iframe":
+        return (
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              overflow: "hidden",
+              borderRadius: "12px",
+            }}
+          >
+            <iframe
+              src={item.iframeUrl || "about:blank"}
+              title={item.title || "Web Interface"}
+              style={{
+                width: "100%",
+                height: "100%",
+                border: "none",
+                borderRadius: "12px",
+              }}
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            />
+          </div>
+        );
+
+      case "image":
+        return (
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              overflow: "hidden",
+              borderRadius: "12px",
+              background: "#f5f5f5",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {item.imageUrl || item.imageData ? (
+              <img
+                src={item.imageUrl || item.imageData}
+                alt={item.title || "Board image"}
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                  objectFit: "contain",
+                  borderRadius: "8px",
+                }}
+              />
+            ) : (
+              <div style={{ color: "#999", fontSize: "14px" }}>
+                No image loaded
+              </div>
+            )}
+          </div>
+        );
+
+      case "button":
+        return (
+          <>
+            <button
+              onClick={() => {
+                if (item.buttonAction === "clearChats") {
+                  setShowClearModal(true);
+                }
+              }}
+              style={{
+                width: "100%",
+                height: "100%",
+                padding: "8px 16px",
+                border: "none",
+                borderRadius: "8px",
+                background: item.buttonColor || "#dc2626",
+                color: "white",
+                fontSize: "13px",
+                fontWeight: "600",
+                cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15)",
+                transition: "all 0.2s ease",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.25)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.15)";
+              }}
+            >
+              {item.buttonIcon && <span style={{ fontSize: "14px" }}>{item.buttonIcon}</span>}
+              {item.buttonText || "Button"}
+            </button>
+
+            {/* Confirmation Modal */}
+            {showClearModal && (
+              <div
+                style={{
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: "rgba(0, 0, 0, 0.5)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 10000,
+                }}
+                onClick={() => setShowClearModal(false)}
+              >
+                <div
+                  style={{
+                    background: "white",
+                    borderRadius: "12px",
+                    padding: "32px",
+                    maxWidth: "400px",
+                    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h2 style={{ margin: "0 0 16px 0", fontSize: "20px", fontWeight: "700", color: "#dc2626" }}>
+                    ⚠️ Clear Chat History
+                  </h2>
+                  <p style={{ margin: "0 0 24px 0", fontSize: "14px", color: "#374151", lineHeight: "1.5" }}>
+                    Are you sure you want to clear all chat history? This action cannot be undone.
+                  </p>
+                  <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                    <button
+                      onClick={() => setShowClearModal(false)}
+                      style={{
+                        padding: "10px 20px",
+                        border: "1px solid #d1d5db",
+                        borderRadius: "6px",
+                        background: "white",
+                        color: "#374151",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "#f3f4f6";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "white";
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const easlIframe = document.querySelector('[data-item-id="iframe-item-easl-interface"] iframe') as HTMLIFrameElement;
+                        
+                        if (!easlIframe || !easlIframe.contentWindow) {
+                          setAlertModal({
+                            isOpen: true,
+                            message: 'EASL interface not found. Please make sure it is loaded on the board.',
+                            type: 'error'
+                          });
+                          setShowClearModal(false);
+                          return;
+                        }
+
+                        // Send clear chats message to EASL iframe
+                        easlIframe.contentWindow.postMessage({
+                          type: 'CLEAR_CHATS',
+                          payload: { timestamp: new Date().toISOString() }
+                        }, 'https://easl-board.vercel.app');
+                        
+                        console.log('🗑️ Clear chats request sent to EASL');
+
+                        // Also clear conversation history on backend
+                        try {
+                          const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 
+                            (window.location.hostname === 'localhost' ? 'http://localhost:3001' : window.location.origin);
+                          
+                          const response = await fetch(`${API_BASE_URL}/api/easl-reset`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' }
+                          });
+
+                          if (response.ok) {
+                            const data = await response.json();
+                            console.log(`✅ Conversation history cleared: ${data.previousCount} conversations removed`);
+                          } else {
+                            console.error('❌ Failed to clear conversation history');
+                          }
+                        } catch (error) {
+                          console.error('❌ Error clearing conversation history:', error);
+                        }
+                        
+                        setShowClearModal(false);
+                      }}
+                      style={{
+                        padding: "10px 20px",
+                        border: "none",
+                        borderRadius: "6px",
+                        background: "#dc2626",
+                        color: "white",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "#b91c1c";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "#dc2626";
+                      }}
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <ItemContainer
+      data-item-id={item.id}
+      className={isDragging ? "dragging" : ""}
+      style={{
+        left: item.x,
+        top: item.y,
+        width: item.width,
+        height:
+          item.type === "agent" ||
+          item.type === "todo" ||
+          item.type === "lab-result" ||
+          item.type === "component" ||
+          item.type === "ehr-data"
+            ? "auto"
+            : item.height,
+        minHeight:
+          item.type === "agent" ||
+          item.type === "todo" ||
+          item.type === "lab-result" ||
+          item.type === "component" ||
+          item.type === "ehr-data" ||
+          item.type === "image"
+            ? item.height === "auto"
+              ? "200px"
+              : item.height
+            : "auto",
+        transform: `rotate(${item.rotation}deg)`,
+        backgroundColor: item.type === "button" ? "transparent" : item.color,
+        border: item.type === "button" ? "none" : (isSelected ? "2px solid #2196f3" : "1px solid rgba(0,0,0,0.1)"),
+        boxShadow: item.type === "button" ? "none" : (isSelected
+          ? "0 4px 20px rgba(33, 150, 243, 0.3)"
+          : "0 2px 8px rgba(0,0,0,0.1)"),
+        cursor: item.type === "button" ? "default" : "move",
+      }}
+      onMouseDown={item.type === "button" ? undefined : handleMouseDown}
+      onMouseUp={item.type === "button" ? undefined : handleMouseUp}
+      onMouseLeave={item.type === "button" ? undefined : handleMouseUp}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.8 }}
+      transition={{ duration: 0.2 }}
+      // Disable hover/tap animations during drag for better performance
+      whileHover={isDragging || item.type === "button" ? {} : { scale: 1.02 }}
+      whileTap={isDragging || item.type === "button" ? {} : { scale: 0.98 }}
+    >
+      {renderContent()}
+      
+      {/* Alert Modal */}
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal({ ...alertModal, isOpen: false })}
+        message={alertModal.message}
+        type={alertModal.type}
+      />
+    </ItemContainer>
+  );
+};
+
+export default BoardItem;
