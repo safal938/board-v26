@@ -1058,6 +1058,46 @@ app.post("/api/board-items/batch-delete", async (req, res) => {
   }
 });
 
+
+app.post("/api/reload-board-items", async (req, res) => {
+  try {
+    console.log("🔄 Force reloading board items from static file...");
+    
+    // Load from static file
+    const staticItems = await loadStaticItems();
+    
+    // Save to Redis (overwrite existing data)
+    if (isRedisConnected && redisClient) {
+      await redisClient.set("boardItems", JSON.stringify(staticItems));
+      console.log(`✅ Reloaded ${staticItems.length} items from static file to Redis`);
+    }
+    
+    // Broadcast reload event to all connected clients so they refresh
+    await broadcastSSE({
+      event: 'board-reloaded',
+      message: 'Board items reloaded from static file',
+      itemCount: staticItems.length,
+      timestamp: new Date().toISOString()
+    });
+    
+    console.log(`📡 Broadcasted board-reloaded event to all clients`);
+    
+    res.json({
+      success: true,
+      message: "Board items reloaded from static file. All clients will refresh automatically.",
+      itemCount: staticItems.length,
+      hasIframeItem: staticItems.some(item => item.id === "iframe-item-easl-interface")
+    });
+  } catch (error) {
+    console.error("❌ Error reloading board items:", error);
+    res.status(500).json({
+      error: "Failed to reload board items",
+      details: error.message
+    });
+  }
+});
+
+
 // POST /api/todos - Create a new TODO board item
 app.post("/api/todos", async (req, res) => {
   try {
